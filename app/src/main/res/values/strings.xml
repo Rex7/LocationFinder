@@ -1,0 +1,8 @@
+<resources>
+    <string name="app_name">LocationFinder</string>
+    <string name="title">My Location Tracker</string>
+    <string name="lat">Latitude</string>
+    <string name="lon">Longitude</string>
+    <string name="check_internet">Check Internet</string>
+
+</resources>
