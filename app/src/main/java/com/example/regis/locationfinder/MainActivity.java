@@ -1,9 +1,11 @@
 package com.example.regis.locationfinder;
 
+import android.Manifest;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
+import android.os.Build;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
@@ -13,6 +15,7 @@ import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
@@ -21,23 +24,30 @@ import com.google.android.gms.location.LocationListener;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationServices;
 
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.net.URLConnection;
+
 public class MainActivity extends AppCompatActivity implements View.OnClickListener, GoogleApiClient.ConnectionCallbacks,
-        GoogleApiClient.OnConnectionFailedListener, LocationListener {
-    TextView result,longitudeText,latitudeText;
+        GoogleApiClient.OnConnectionFailedListener, LocationListener, TransferData {
+    TextView result, longitudeText, latitudeText;
     private GoogleApiClient googleApiClient;
     private LocationRequest locationRequest;
+    private int responseCode;
     private FusedLocationProviderApi locationProviderApi = LocationServices.FusedLocationApi;
-    private double lat;
-    private double lon;
+    String Tag = "Main_Activity";
     Button check;
+    private static final int FINE_LOCATION = 1;
+    private static final int COARSE_LOCATION = 2;
+    private boolean grantedPermission = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         result = (TextView) findViewById(R.id.ResulText);
-        latitudeText=(TextView)findViewById(R.id.latitude);
-        longitudeText=(TextView)findViewById(R.id.longitude);
+        latitudeText = (TextView) findViewById(R.id.latitude);
+        longitudeText = (TextView) findViewById(R.id.longitude);
         check = (Button) findViewById(R.id.SubmitButton);
         check.setOnClickListener(this);
         googleApiClient = new GoogleApiClient.Builder(this)
@@ -45,10 +55,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 .addConnectionCallbacks(this)
                 .addOnConnectionFailedListener(this)
                 .build();
-        locationRequest = new LocationRequest();
-        locationRequest.setInterval(60 * 1000);
-        locationRequest.setFastestInterval(15 * 1000);
-        locationRequest.setPriority(LocationRequest.PRIORITY_BALANCED_POWER_ACCURACY);
+        LocationRequestConfiguration();
+        new MyAsync(this).execute();
+
     }
 
     @Override
@@ -64,25 +73,84 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     public void CheckConnection() {
         ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
         NetworkInfo networkInfo = connectivityManager.getActiveNetworkInfo();
-        if (networkInfo != null && networkInfo.isConnected()) {
-            result.setText("Connected to " + networkInfo.getTypeName());
-        } else {
-            result.setText("No Network detected");
+        try {
+
+            if (networkInfo != null && networkInfo.isConnected()) {
+                result.setText("Connected to to "+networkInfo.getTypeName());
+                boolean flag = checkInternetConnection();
+
+                Log.v("boolean","value"+flag);
+                if (flag) {
+                    Toast.makeText(getApplicationContext(), "We have internet connection", Toast.LENGTH_SHORT).show();
+                } else {
+                    Toast.makeText(getApplicationContext(), "We Dont have internet connection", Toast.LENGTH_SHORT).show();
+                }
+
+
+            } else {
+                result.setText("No Network detected ");
+
+            }
+        } catch (Exception e) {
+            Log.v("error ", e.toString());
         }
     }
 
     public void locationRequestUpdate() {
-        if (ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED && ActivityCompat.checkSelfPermission(this, android.Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            // TODO: Consider calling
-            //    ActivityCompat#requestPermissions
-            // here to request the missing permissions, and then overriding
-            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-            //                                          int[] grantResults)
-            // to handle the case where the user grants the permission. See the documentation
-            // for ActivityCompat#requestPermissions for more details.
+        if (ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+                ActivityCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                requestPermissions(new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, FINE_LOCATION);
+            }
+            Log.v(Tag, "g");
+
             return;
         }
         LocationServices.FusedLocationApi.requestLocationUpdates(googleApiClient, locationRequest, this);
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        switch (requestCode) {
+            case FINE_LOCATION:
+                if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    grantedPermission = true;
+                    Toast.makeText(getApplicationContext(), "granted", Toast.LENGTH_SHORT).show();
+                } else {
+                    grantedPermission = false;
+                    String req = getResources().getString(R.string.request_not_granted);
+                    Toast.makeText(getApplicationContext(), req, Toast.LENGTH_SHORT).show();
+                }
+                break;
+            case COARSE_LOCATION:
+
+                break;
+        }
+
+    }
+
+    public void LocationRequestConfiguration() {
+        ConnectivityManager connectivityManager = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+        NetworkInfo networkInfo = connectivityManager.getActiveNetworkInfo();
+        locationRequest = new LocationRequest();
+        locationRequest.setInterval(60 * 1000);
+        locationRequest.setFastestInterval(15 * 1000);
+
+/*
+        switch (networkInfo.getTypeName()) {
+            case "WIFI":
+                Toast.makeText(getApplicationContext(), "WIFI", Toast.LENGTH_SHORT).show();
+                break;
+            case "MOBILE":
+                Toast.makeText(getApplicationContext(), "MOBILE", Toast.LENGTH_SHORT).show();
+                break;
+            case "null":
+                Toast.makeText(getApplicationContext(), "Gps", Toast.LENGTH_SHORT).show();
+
+        }
+        */
+        locationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
     }
 
     @Override
@@ -97,7 +165,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     @Override
     public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
-
+        Log.v(Tag, "Connection failed");
     }
 
     @Override
@@ -110,13 +178,15 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     @Override
     protected void onStop() {
         super.onStop();
-        googleApiClient.disconnect();
+        if (grantedPermission)
+            googleApiClient.disconnect();
     }
 
     @Override
     protected void onPause() {
         super.onPause();
-        LocationServices.FusedLocationApi.removeLocationUpdates(googleApiClient, this);
+        if (grantedPermission)
+            LocationServices.FusedLocationApi.removeLocationUpdates(googleApiClient, this);
     }
 
     @Override
@@ -129,11 +199,43 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     @Override
     public void onLocationChanged(Location location) {
-        lon=location.getLongitude();
-        lat=location.getLatitude();
-        latitudeText.setText(getResources().getText(R.string.lat)+String.valueOf(lat));
-        longitudeText.setText(getResources().getText(R.string.lon)+String.valueOf(lon));
-        Log.v("Latitude ",""+lat);
-        Log.v("longitude "," "+lon);
+        Double lon, lat;
+        lon = location.getLongitude();
+        lat = location.getLatitude();
+        latitudeText.setText(getResources().getText(R.string.lat) + String.valueOf(lat));
+        longitudeText.setText(getResources().getText(R.string.lon) + String.valueOf(lon));
+        Log.v("Latitude ", "" + lat);
+        Log.v("longitude ", " " + lon);
+        Toast.makeText(getApplicationContext(), "\nNew location Updating ", Toast.LENGTH_SHORT).show();
+        Toast.makeText(getApplicationContext(), "Latitude is " + lat + "\nLongitude is " + lon, Toast.LENGTH_LONG).show();
+    }
+
+    @Override
+    public void setData(int res) {
+        responseCode = res;
+    }
+
+    public boolean checkInternetConnection() {
+        try{
+            URL url = new URL("https://www.google.com/");
+            URLConnection urlConnection = url.openConnection();
+            urlConnection.setConnectTimeout(1000);
+            HttpURLConnection  httpUrlConnection = (HttpURLConnection)urlConnection;
+            httpUrlConnection.connect();
+            int res=httpUrlConnection.getResponseCode();
+            Log.v("Respnseee","res"+res);
+            return true;
+
+
+
+        }
+        catch(Exception ex){
+            Toast.makeText(getApplicationContext(),"Exception raised",Toast.LENGTH_LONG).show();
+            Log.v("fuck this shit",ex.getMessage());
+            return false;
+
+        }
+
+
     }
 }

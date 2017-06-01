@@ -4,5 +4,6 @@
     <string name="lat">Latitude</string>
     <string name="lon">Longitude</string>
     <string name="check_internet">Check Internet</string>
+    <string name="request_not_granted">Required Permission not granted"</string>
 
 </resources>
